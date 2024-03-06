@@ -46,6 +46,8 @@ export default function Challenge() {
     NO_PLACE,
   ]);
 
+  const [loading, setLoading] = useState(true);
+
   const [award, setAward] = useState('');
   const [terminalUsername, setTerminalUsername] = useState('...');
   const [terminalPassword, setTerminalPassword] = useState('...');
@@ -61,6 +63,7 @@ export default function Challenge() {
 
   const [progress, setProgress] = useState(0);
   const [eta, setEta] = useState(15);
+  const [username, setUsername] = useState(null);
 
   // change eta by one every sec
   useEffect(() => {
@@ -106,67 +109,6 @@ export default function Challenge() {
     spassword: 'Loading...',
   });
 
-  const getTerminalStatus = async (id) => {
-    setFetchingTerminal(true);
-    if(!foundTerminal) {
-      const isActive = await api.getStatus(id);
-      if(isActive) {
-
-        setFoundTerminal(true);
-        setFetchingTerminal(false);
-
-        setTimeout(() => {
-          document.getElementById('termurl').classList.remove('absolute');
-          document.getElementById('termurl').classList.remove('opacity-0');
-          document.getElementById('terminalLoader').classList.add('hidden');
-        }, 3000);
-
-      } else {
-        setTimeout(async () => {
-          await getTerminalStatus(id);
-        }, 3000);
-      }
-    }
-  };
-
-
-  const fetchTerminal = async () => {
-    if(!challenge) return;
-    loadBar();
-    const token = auth.currentUser.accessToken;
-    setFetchingTerminal(true);
-    const data = await api.checkUserTerminal(token, challenge.id);
-    if(data !== null) {
-      setPassword(data.password);
-      setServiceName(data.serviceName);
-      setTerminalUrl(data.url);
-      setUserName(data.userName);
-      setMinutesRemaining(data.minutesRemaining);
-      console.log('Terminal data ID:', data.id);
-      console.log('Terminal url:', data.url);
-      await getTerminalStatus(data.id);
-    } else {
-      await createTerminal();
-    }
-  };
-
-  const createTerminal = async () => {
-    if(!challenge) return;
-    setFetchingTerminal(true);
-    const token = auth.currentUser.accessToken;
-    const data = await api.buildTerminal(challenge, token);
-    if(data) {
-      setPassword(data.password);
-      setServiceName(data.serviceName);
-      setTerminalUrl(data.url);
-      setUserName(data.userName);
-      setMinutesRemaining(data.minutesRemaining);
-      await getTerminalStatus(data.id);
-    } else {
-      toast.error("Unable to create the terminal, please refresh the page and try again");
-      setFetchingTerminal(false);
-    }
-  };
 
   const getChallengeData = async () => {
     const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id;
@@ -174,23 +116,25 @@ export default function Challenge() {
     const { difficulty } = result.body;
     setChallenge(result.body);
     setDifficulty(difficulty);
+    setLoading(false);
   };
 
   const fetchLikeUrl = async () => {
     try {
+      setUsername(localStorage.getItem('username'));
+
       const userLikesUrl = localStorage.getItem('userLikesUrl');
-      const requestOptions = {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include'
-      };
-      const response = await fetch(userLikesUrl, requestOptions);
-      const result = await response.json();
-      const likes = result.filter((item) => {
+      const response = await request(userLikesUrl, 'GET', null);
+
+      const likedChallenge = response.some(challenge => challenge.challengeId === id);
+      console.log("USER ALREADY LIKED: " + likedChallenge);
+      setLiked(likedChallenge);
+
+      const likes = response.filter((item) => {
         return item.challenge.slug === slug;
       });
+
+
     } catch (err) {
       console.log(err);
     }
@@ -198,13 +142,14 @@ export default function Challenge() {
 
   useEffect(() => {
     if (id) {
+      getChallengeData();
       fetchLeaderboard();
+      getLikes();
+      fetchLikeUrl();
       //fetchComments();
       if (challenge.upvotes) {
         setLikeCount(challenge.upvotes);
-       }
-       fetchLikeUrl();
-      getChallengeData();
+      }
     }
     const award = localStorage.getItem('award');
     if (award) {
@@ -244,6 +189,9 @@ export default function Challenge() {
     }
   };
 
+  const fetchTerminal = async () => {
+  };
+
   const submitFlag = async () => {
     const slug = challenge.slug;
     // console.log(flag.length);
@@ -262,26 +210,13 @@ export default function Challenge() {
       }, 2000);
     } else {
       try {
-        const endPoint =
-          process.env.NEXT_PUBLIC_API_URL +
-          '/challenges/' +
-          id +
-          '/submissions';
-        const requestOptions = {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            keyword: flag,
-          }),
-        };
-        const response = await fetch(endPoint, requestOptions);
-        console.log(await response.json());
-        const { success, incorrect, error } = await response.json();
-
-
+        const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/submissions';
+        const response = await request(endPoint, "POST", { keyword: flag });
+        if (!response) {
+          console.log('Error occured while submitting the flag');
+          return;
+        }
+        const { success, incorrect, error } = response;
         if (error) {
           document.getElementById('enterFlagBTN').innerHTML = 'Submit Flag';
           setSubmissionMsg('error');
@@ -297,14 +232,11 @@ export default function Challenge() {
           if (!alreadySolved) {
             try {
               const endPoint =
-                process.env.NEXT_PUBLIC_API_URL +
-                '/users/' +
-                localStorage.getItem('username') +
-                '/complete-challenge/' +
+                process.env.NEXT_PUBLIC_API_URL + '/users/' + localStorage.getItem('username') + '/complete-challenge/' +
                 id +
                 '/' +
                 difficulty;
-              const response = await request(endPoint, "POST", {keyword: flag});
+              const response = await request(endPoint, "POST", { keyword: flag });
             } catch (err) {
               console.log(err);
             }
@@ -417,7 +349,7 @@ export default function Challenge() {
 
   const submitComment = async () => {
     const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/comments';
-    const result = await request(endPoint, 'POST', {content: comment});
+    const result = await request(endPoint, 'POST', { content: comment });
 
     setComments([result, ...comments]);
 
@@ -432,28 +364,39 @@ export default function Challenge() {
     setFlag(event.target.value);
   };
   const likeChallenge = async () => {
-    console.log(liked);
-    if (!liked) {
-      const endPoint =
-        process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/like';
-      const { error }= await request(endPoint, 'POST', {});
-      if (error) {
-        alert(error);
-      } else {
+    try {
+      console.log(liked);
+      if (!liked) {
+        const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/like';
+        console.log("FLAG: ADDING LIKE");
+        const result = await request(endPoint, 'POST', {});
         setLikeCount(likeCount + 1);
         setLiked(true);
-      }
-    } else {
-      const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/deletelike';
-      const { error } = await request(endPoint, "POST", {});
-      if (error) {
-        alert(error);
       } else {
+        const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/deletelike';
+        const result = await request(endPoint, "POST", {});
         setLikeCount(likeCount - 1);
         setLiked(false);
       }
+    } catch (err) {
+      console.log("Something wrong with adding or removing like: " + err);
     }
   };
+
+  const getLikes = async () => {
+    try {
+      const endPoint = process.env.NEXT_PUBLIC_API_URL + '/challenges/' + id + '/upvotes';
+      const result = await request(endPoint, "GET", null);
+
+
+      const likeCount = result.upvotes;
+      console.log("LIKES: " + result.upvotes);
+      setLikeCount(likeCount);
+
+    } catch (err) {
+      console.log("Error fetching UPVOTE");
+    }
+  }
 
   return (
     <>
@@ -499,7 +442,7 @@ export default function Challenge() {
                 }
                 alt=""
               />
-              <p className="my-auto text-sm">{challenge.creator}</p>
+              <a href={process.env.NEXT_PUBLIC_FRONTEND_URL + "/users/" + challenge.creator} className="my-auto text-sm hover:underline">{challenge.creator}</a>
             </div>
           </div>
         </div>
@@ -507,21 +450,35 @@ export default function Challenge() {
         <div className="mx-auto mt-6 max-w-6xl text-left">
           <div className="mb-2 flex place-items-center justify-between">
             <div>
-              <h1 className="inline-block text-3xl font-semibold text-white">
+              <h1 className="inline-block text-2xl font-semibold text-white">
                 {' '}
                 Challenge Description{' '}
               </h1>
             </div>
+
+            {
+              loading && (
+                <div className="flex place-items-center">
+                  <i className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-neutral-800"></i>
+                </div>
+              )
+            }
 
             <div className="flex">
               <button
                 onClick={likeChallenge}
                 className="card-body m-1 flex rounded-md bg-neutral-800 px-10 py-2 hover:bg-neutral-700"
               >
-                <h1 className=" mr-4 bg-gradient-to-br from-orange-400 to-yellow-400 bg-clip-text text-2xl font-semibold text-transparent">
-                  <HeartIcon className="h-8 w-8 text-red-500" />
-                </h1>
-                <p className=" text-2xl text-white">{likeCount}</p>
+                {liked ?
+                  <h1 className="mb-2 mr-4 bg-gradient-to-br from-orange-400 to-yellow-400 bg-clip-text text-xl font-semibold text-transparent">
+                    <i class="fas fa-heart text-red-500 text-2xl mt-2"> </i>
+                  </h1>
+                  :
+                  <h1 className="mb-2 mr-4 bg-gradient-to-br from-orange-400 to-yellow-400 bg-clip-text text-xl font-semibold text-transparent">
+                    <i class="far fa-heart text-red-500 text-2xl mt-2"> </i>
+                  </h1>
+                }
+                <p className="mt-2 text-2xl text-white">{likeCount}</p>
               </button>
               <button
                 onClick={() => {
@@ -555,8 +512,8 @@ export default function Challenge() {
 
           <div
             id="challengeDetails"
-            style={{ color: '#8c8c8c' }}
-            className="w-full whitespace-pre-wrap border-l-4 border-blue-700 bg-neutral-800/50 px-4 py-2 text-lg text-white"
+
+            className="w-full text-white whitespace-pre-wrap  border-blue-700 bg-neutral-800/50 px-4 py-2 text-lg text-white"
           >
             <div>
               <MarkdownViewer content={challenge.content} />
@@ -581,15 +538,19 @@ export default function Challenge() {
                     Submit Flag
                   </button>
                   <button
-                    hidden={!hintMessages}
+                    //hidden={!hintMessages}
                     onClick={() => setHintOpen(true)}
-                    className="ml-2  mt-4  rounded-lg  bg-black bg-yellow-700 px-4 py-1 text-white text-yellow-300 hover:bg-yellow-900"
+                    className="hidden ml-2  mt-4  rounded-lg  bg-black bg-yellow-700 px-4 py-1 text-white text-yellow-300 hover:bg-yellow-900"
                   >
                     Stuck?
                   </button>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className='bg-neutral-800 px-2 py-4 mt-10 mb-10'>
+            <h1 className='text-white text-center'>Public terminals are temporarily unavaliable. Some challenges that require pre-configured enviroments may not be solvable.</h1>
           </div>
           <div className="mt-6 grid hidden gap-10 sm:grid-cols-1 lg:grid-cols-3">
             <div
@@ -628,7 +589,7 @@ export default function Challenge() {
               </div>
             </div>
           </div>
-          <div id="terminal" className=" mx-auto mt-6 max-w-6xl">
+          <div id="terminal" className="hidden mx-auto mt-6 max-w-6xl">
             <div className="hint mb-2 text-gray-400">
               <span className="font-semibold text-white   ">
                 {' '}
@@ -713,8 +674,8 @@ export default function Challenge() {
               </div>
             }
           </div>
-          <div className="mt-10  rounded-lg px-5 pb-20">
-            <h1 className="text-3xl font-semibold text-white">Comments</h1>
+          <div className="mt-10  rounded-lg  pb-20">
+            <h1 className="text-2xl font-semibold text-white">Comments</h1>
             <textarea
               id="comment"
               onChange={commentChange}
@@ -986,7 +947,7 @@ export default function Challenge() {
           </div>
         </Dialog>
       </Transition.Root>
-      <p className="mx-auto mt-1.5 w-3/5 rounded-lg bg-neutral-800 px-4 py-0.5 text-sm text-gray-200">
+      <p className="hidden mx-auto mt-1.5 w-3/5 rounded-lg bg-neutral-800 px-4 py-0.5 text-sm text-gray-200">
         ℹ We provide accessible environments for everyone to run cybersecurity
         tools. Abuse and unnecessary computation is prohibited.
       </p>

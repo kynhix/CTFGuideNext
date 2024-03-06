@@ -28,7 +28,7 @@ function classNames(...classes) {
 const auth = getAuth();
 const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL;
 
-const adminList = ['pranav,'];
+const adminList = ['pranav'];
 
 const DEFAULT_NOTIFICATION = {
   image:
@@ -38,12 +38,12 @@ const DEFAULT_NOTIFICATION = {
   receivedTime: '12h ago',
 };
 
-export function StandardNav() {
+export function StandardNav(props) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [points, setPoints] = useState('0');
   const [notifications, setNotifications] = useState([]);
   const [showBanner, setShowBanner] = useState(false);
-
+  const { guestAllowed } = props;
   const router = useRouter();
 
   function logout() {
@@ -81,18 +81,26 @@ export function StandardNav() {
   ]);
 
   const [username, setUsername] = useState(null);
-  const [pfp, setPfp] = useState('');
+  const [pfp, setPfp] = useState(null);
 
   // get user's profile picture
   useEffect(() => {
     if (!username) {
       return;
     }
+
+  
+  if (localStorage.getItem("pfp")) {
+    setPfp(localStorage.getItem("pfp"));
+  }
+
+  
+
+   
       const fetchData = async () => {
           try {
               const endPoint = process.env.NEXT_PUBLIC_API_URL + '/users/' + username + '/pfp';
               const result = await request(endPoint, "GET", null);
-              console.log(result)
               if (result) {
                   setPfp(result)
               } else {
@@ -112,6 +120,7 @@ export function StandardNav() {
       const result = await request(endPoint, 'GET', null);
       if (!result || !result.length) return;
 
+      console.log("Here is the result");
       console.log(result);
 
       setNotificationData(
@@ -258,7 +267,8 @@ export function StandardNav() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center">
+                { !guestAllowed && 
+                  <div className="flex items-center ">
                   <div
                     className="mb-0 flex items-center space-x-2 rounded-lg px-4 py-1"
                     style={{ backgroundColor: '#212121', borderWidth: '0px' }}
@@ -302,7 +312,7 @@ export function StandardNav() {
                           <Menu.Item>
                             {({ active }) => (
                               <a
-                                href={`../../users/${username}`}
+                                href={`${process.env.NEXT_PUBLIC_FRONTEND_URL}/users/${username}`}
                                 className={classNames(
                                   active ? '-100' : '',
                                   'block flex px-4 py-2 text-sm text-white hover:bg-neutral-800'
@@ -389,6 +399,8 @@ export function StandardNav() {
                     </Menu>
                   </div>
                 </div>
+                }
+              
               </div>
             </div>
 
@@ -435,7 +447,7 @@ export function StandardNav() {
                 <div className="space-y-1">
                   <Disclosure.Button
                     as="a"
-                    href="#"
+                    href={`${process.env.NEXT_PUBLIC_FRONTEND_URL}/users/${username}`}
                     className="hover-bg-neutral-900 block px-4 py-2 text-base font-medium text-gray-300 hover:text-gray-800 sm:px-6"
                   >
                     Your Profile
