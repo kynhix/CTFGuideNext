@@ -1,6 +1,7 @@
-import { useState } from 'react';
 import { MarkDone } from '@/components/learn/MarkDone';
 import { FlagIcon } from '@heroicons/react/20/solid';
+import 'xterm/css/xterm.css';
+import { useEffect, useState } from 'react';
 import { MarkdownViewer } from './MarkdownViewer';
 
 export function LearnCoreMarkdown({ title, pages = ['string'] }) {
@@ -10,6 +11,23 @@ export function LearnCoreMarkdown({ title, pages = ['string'] }) {
   if (!Array.isArray(pages)) {
     pages = [pages];
   }
+
+  useEffect(() => {
+    let term = undefined;
+    const initTerminal = async () => {
+      const { Terminal } = await import('xterm')
+      term = new Terminal()
+      term.open(document.getElementById('terminal'));
+      term.write('Hello from \x1B[1;3;31mxterm.js\x1B[0m $ ');
+    }
+    initTerminal();
+
+    return () => {
+      if (term) {
+        term.dispose();
+      }
+    };
+  }, [])
 
   return (
     <div className="relative h-full overflow-hidden w-full min-h-[500px]">
@@ -30,9 +48,7 @@ export function LearnCoreMarkdown({ title, pages = ['string'] }) {
       </div>
       <div className="flex h-[calc(100%_-_6rem)] w-full gap-0">
         <div className='bg-neutral-800 pb-12 h-full w-1/2 overflow-y-auto relative'>
-          {/* Normaly, you do not want to set the index as the key, */}
-          {/* but the index should never change. */}
-          <MarkdownViewer className='text-gray-50 p-2' content={pages[curPageIndex]} />
+          <MarkdownViewer className='text-gray-50 p-4' content={pages[curPageIndex]} />
         </div>
         <div className="flex flex-col h-full w-1/2 p-2 overflow-hidden bg-neutral-950">
           <div className="flex w-full shrink grow-0 text-sm pb-2 text-white">
@@ -44,14 +60,8 @@ export function LearnCoreMarkdown({ title, pages = ['string'] }) {
               <p className='text-ellipsis'>No time limit!</p>
             </div>
           </div>
-          {/* <iframe */}
-          {/*   id="terminal" */}
-          {/*   className="w-full bg-black" */}
-          {/*   height="500" */}
-          {/*   src="https://terminal.ctfguide.com/wetty/ssh/root?" */}
-          {/* ></iframe> */}
           <div className='bg-black self-stretch grow'>
-
+            <div id="terminal"></div>
           </div>
         </div>
       </div>
