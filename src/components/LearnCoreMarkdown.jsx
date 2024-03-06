@@ -16,7 +16,9 @@ export function LearnCoreMarkdown({ title, pages = ['string'] }) {
     let term = undefined;
     const initTerminal = async () => {
       const { Terminal } = await import('xterm')
-      term = new Terminal()
+      term = new Terminal({
+        cursorBlink: true,
+      })
       term.open(document.getElementById('terminal'));
       term.write('Hello from \x1B[1;3;31mxterm.js\x1B[0m $ ');
     }
