@@ -1,7 +1,7 @@
 import { MarkDone } from '@/components/learn/MarkDone';
 import { FlagIcon } from '@heroicons/react/20/solid';
+import { useEffect, useRef, useState } from 'react';
 import 'xterm/css/xterm.css';
-import { useEffect, useState } from 'react';
 import { MarkdownViewer } from './MarkdownViewer';
 
 export function LearnCoreMarkdown({ title, pages = ['string'] }) {
@@ -12,22 +12,94 @@ export function LearnCoreMarkdown({ title, pages = ['string'] }) {
     pages = [pages];
   }
 
+  // Demo effect for terminal
   useEffect(() => {
-    let term = undefined;
+    /** @type {import('xterm').Terminal} Terminal */
+    let term;
     const initTerminal = async () => {
+      const terminalEl = document.getElementById('terminal');
+      if (!terminalEl) {
+        console.error('Could not find terminal element.');
+        return;
+      }
       const { Terminal } = await import('xterm')
       term = new Terminal({
         cursorBlink: true,
-      })
-      term.open(document.getElementById('terminal'));
-      term.write('Hello from \x1B[1;3;31mxterm.js\x1B[0m $ ');
+        cursorInactiveStyle: "block",
+        scrollOnUserInput: false,
+        fontWeight: 700,
+      });
+      term.open(terminalEl);
+      term.focus();
     }
-    initTerminal();
+
+    let animationIntId = null;
+    const startAnimationLoop = () => {
+      if (!term) {
+        console.error('Could not start demo animation because no xterm Terminal exists.');
+        return;
+      }
+
+      let sequences = [
+        ['This is some user input.'],
+        3,
+        'This is the output',
+        'This is the output',
+        ['This is some user input.'],
+      ];
+
+      let i = 0;
+      let char = -1;
+      let delay = 0;
+      const animationLoop = () => {
+        if (delay > 0) {
+          --delay;
+          if (delay == 0) {
+            ++i;
+          }
+          return;
+        }
+
+        if (Number.isInteger(sequences[i])) {
+          if (sequences[i] <= 0) {
+            console.warn("Can only use positive delay value.")
+            return;
+          }
+          delay += sequences[i] - 1;
+        } else if (Array.isArray(sequences[i])) {
+          const str = sequences[i][0];
+
+          if (char == str.length) {
+            term.writeln('');
+            ++i;
+            char = -1;
+            return;
+          } else if (char == -1) {
+            term.write('\x1B[32mctfguide\x1B[37m:\x1B[34m~\x1B[37m$ ')
+          } else {
+            term.write(str[char]);
+          }
+          ++char;
+        } else if (typeof (sequences[i]) == 'string') {
+          while (i < sequences.length && typeof (sequences[i]) == 'string') {
+            term.writeln(sequences[i]);
+            ++i;
+          }
+        } else {
+          console.error("Invalid animation sequence.")
+          ++i;
+        }
+      }
+      animationIntId = setInterval(animationLoop, 200);
+    }
+
+    initTerminal().then(startAnimationLoop);
 
     return () => {
       if (term) {
         term.dispose();
       }
+      clearInterval(animationIntId);
     };
   }, [])
 
@@ -63,6 +135,7 @@ export function LearnCoreMarkdown({ title, pages = ['string'] }) {
             </div>
           </div>
           <div className='bg-black self-stretch grow'>
+            {/* Demo terminal */}
             <div id="terminal"></div>
           </div>
         </div>
